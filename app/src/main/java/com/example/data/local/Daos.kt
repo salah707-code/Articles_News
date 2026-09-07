@@ -9,11 +9,26 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ArticleDao {
-    @Query("SELECT * FROM articles ORDER BY createdAt DESC")
+    @Query("SELECT * FROM articles ORDER BY created_at DESC")
     fun getAllArticles(): Flow<List<ArticleEntity>>
 
-    @Query("SELECT * FROM articles WHERE status = :status ORDER BY createdAt DESC")
+    @Query("SELECT * FROM articles WHERE status = :status ORDER BY created_at DESC")
     fun getArticlesByStatus(status: String): Flow<List<ArticleEntity>>
+
+    @Query("SELECT * FROM articles WHERE id = :id LIMIT 1")
+    fun getArticleById(id: Long): Flow<ArticleEntity?>
+
+    @Query("SELECT * FROM articles WHERE source_link = :sourceLink LIMIT 1")
+    suspend fun getArticleBySourceLink(sourceLink: String): ArticleEntity?
+
+    @Query("""
+        SELECT * FROM articles 
+        WHERE title LIKE '%' || :query || '%' 
+           OR summary LIKE '%' || :query || '%' 
+           OR source_name LIKE '%' || :query || '%'
+        ORDER BY created_at DESC
+    """)
+    fun searchArticles(query: String): Flow<List<ArticleEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArticles(articles: List<ArticleEntity>): List<Long>
@@ -33,13 +48,13 @@ interface ArticleDao {
     @Query("SELECT COUNT(*) FROM articles")
     fun getArticlesCount(): Flow<Int>
 
-    @Query("SELECT COUNT(DISTINCT sourceName) FROM articles")
+    @Query("SELECT COUNT(DISTINCT source_name) FROM articles")
     fun getSourcesCount(): Flow<Int>
 
-    @Query("SELECT COALESCE(SUM(dataSizeKb), 0) FROM articles")
+    @Query("SELECT COALESCE(SUM(data_size_kb), 0) FROM articles")
     fun getTotalStorageKb(): Flow<Long>
 
-    @Query("SELECT COALESCE(SUM(totalImagesCount), 0) FROM articles")
+    @Query("SELECT COALESCE(SUM(total_images_count), 0) FROM articles")
     fun getTotalImagesCount(): Flow<Int>
 }
 

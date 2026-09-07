@@ -1,0 +1,67 @@
+# ==============================================================================
+# News Extractor - Android Build & Test Execution Workflow
+# ملف إعدادات التشغيل والتنفيذ الآلي (Execution / CI Pipeline)
+# ==============================================================================
+name: Android CI & Build Execution
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build, Test & Package News Extractor
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: فحص واستخراج الكود المصدري
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: تهيئة بيئة Java JDK 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      # Step 3: منح صلاحية التنفيذ لـ Gradle Wrapper
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew || true
+
+      # Step 4: التحقق من صحة الكود والتبعيات
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v3
+
+      # Step 5: تنفيذ اختبارات الوحدة واختبارات قاعدة بيانات Room (Unit & Robolectric Tests)
+      - name: Run Unit & Room Database Tests
+        run: ./gradlew testDebugUnitTest --continue
+
+      # Step 6: بناء حزمة التطبيق Debug APK
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      # Step 7: أرشفة ورفع تقارير الاختبارات
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
+
+      # Step 8: أرشفة وتنزيل ملف APK الناتج
+      - name: Upload Debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: news-extractor-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14

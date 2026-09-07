@@ -52,16 +52,24 @@ class ArticleRepository(private val database: AppDatabase) {
         articleDao.deleteArticleById(id)
     }
 
+    suspend fun getArticleBySourceLink(sourceLink: String): ExtractedArticle? {
+        return articleDao.getArticleBySourceLink(sourceLink)?.toModel()
+    }
+
+    fun searchArticles(query: String): Flow<List<ExtractedArticle>> {
+        return articleDao.searchArticles(query).map { list -> list.map { it.toModel() } }
+    }
+
     suspend fun saveRecentExtraction(extraction: RecentExtractionEntity) {
         recentExtractionDao.insertExtraction(extraction)
     }
 
-    suspend fun seedInitialDataIfEmpty() {
-        // Will be called on start to populate realistic samples if database is empty
-    }
-
     private fun ArticleEntity.toModel(): ExtractedArticle {
-        val images = if (imageUrlsJson.isBlank()) emptyList() else imageUrlsJson.split(";")
+        val images = when {
+            imageUrlsJson.isNotBlank() -> imageUrlsJson.split(";")
+            imageUrl.isNotBlank() -> listOf(imageUrl)
+            else -> emptyList()
+        }
         val stat = try {
             ArticleStatus.valueOf(status)
         } catch (e: Exception) {
@@ -73,7 +81,7 @@ class ArticleRepository(private val database: AppDatabase) {
             summary = summary,
             content = content,
             sourceName = sourceName,
-            sourceUrl = sourceUrl,
+            sourceUrl = sourceLink,
             publishedAt = publishedAt,
             category = category,
             imageUrls = images,
@@ -87,13 +95,15 @@ class ArticleRepository(private val database: AppDatabase) {
     }
 
     private fun ExtractedArticle.toEntity(): ArticleEntity {
+        val primaryImage = imageUrls.firstOrNull() ?: ""
         return ArticleEntity(
             id = id,
             title = title,
             summary = summary,
+            imageUrl = primaryImage,
+            sourceLink = sourceUrl,
             content = content,
             sourceName = sourceName,
-            sourceUrl = sourceUrl,
             publishedAt = publishedAt,
             category = category,
             imageUrlsJson = imageUrls.joinToString(";"),
