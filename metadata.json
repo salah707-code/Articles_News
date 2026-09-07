@@ -1,0 +1,6 @@
+{
+  "name": "News Extractor",
+  "description": "استخراج المقالات والأخبار والصور من أي موقع دون RSS مع دعم كامل للغة العربية RTL وتحديث ديناميكي فوري للحالات",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
