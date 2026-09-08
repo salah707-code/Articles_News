@@ -1,6 +1,7 @@
 package com.example.data.local
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -38,6 +39,9 @@ interface ArticleDao {
 
     @Update
     suspend fun updateArticle(article: ArticleEntity)
+
+    @Delete
+    suspend fun deleteArticle(article: ArticleEntity)
 
     @Query("DELETE FROM articles WHERE id = :id")
     suspend fun deleteArticleById(id: Long)
