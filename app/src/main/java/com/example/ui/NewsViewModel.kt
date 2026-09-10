@@ -5,12 +5,16 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
 import com.example.data.local.RecentExtractionEntity
+import com.example.data.model.ArticleFreshness
 import com.example.data.model.ArticleStatus
+import com.example.data.model.DateSource
 import com.example.data.model.ExtractedArticle
 import com.example.data.model.ExtractedMediaImage
 import com.example.data.model.ExtractionStage
 import com.example.data.model.ExtractionStats
 import com.example.data.repository.ArticleRepository
+import com.example.data.util.DateParserAndValidator
+import com.example.data.util.DeduplicationHelper
 import com.example.engine.LiveExtractionUiState
 import com.example.engine.NewsExtractionEngine
 import kotlinx.coroutines.flow.*
@@ -53,6 +57,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedImage = MutableStateFlow<ExtractedMediaImage?>(null)
     val selectedImage: StateFlow<ExtractedMediaImage?> = _selectedImage.asStateFlow()
 
+    private val _manualFreshness = MutableStateFlow<ArticleFreshness?>(null)
+
+    val freshnessState: StateFlow<ArticleFreshness>
+
     val allArticles: StateFlow<List<ExtractedArticle>>
     val stats: StateFlow<ExtractionStats>
     val recentExtractions: StateFlow<List<RecentExtractionEntity>>
@@ -65,6 +73,20 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         repository = ArticleRepository(db)
         extractionEngine = NewsExtractionEngine(viewModelScope)
         extractionState = extractionEngine.uiState
+
+        freshnessState = combine(
+            extractionState,
+            _currentTab,
+            _manualFreshness
+        ) { extraction, tab, manual ->
+            when {
+                manual != null -> manual
+                extraction.stage == ExtractionStage.INTERNET_LOST -> ArticleFreshness.OFFLINE
+                extraction.stage == ExtractionStage.EXTRACTING -> ArticleFreshness.LIVE
+                extraction.stage == ExtractionStage.SUCCESS && tab == AppNavTab.EXTRACTION -> ArticleFreshness.LIVE
+                else -> ArticleFreshness.CACHED
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ArticleFreshness.CACHED)
 
         allArticles = repository.allArticles.stateIn(
             viewModelScope,
@@ -215,10 +237,33 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Executes safe, non-destructive refresh of the news library:
+     * Validates ages -> preserves stored records -> marks only genuinely fresh articles as new -> updates UI
+     */
+    fun refreshLibrary() {
+        viewModelScope.launch {
+            val current = allArticles.first()
+            val now = System.currentTimeMillis()
+            for (art in current) {
+                val isStillNew = DateParserAndValidator.isGenuinelyNew(
+                    publishedAtEpoch = art.publishedAtEpoch,
+                    dateSource = art.dateSource,
+                    isDuplicate = false,
+                    referenceTimeMillis = now
+                )
+                if (art.isNew != isStillNew) {
+                    repository.updateArticle(art.copy(isNew = isStillNew))
+                }
+            }
+        }
+    }
+
     private fun seedInitialData() {
         viewModelScope.launch {
             val currentArticles = allArticles.first()
             if (currentArticles.isEmpty()) {
+                val now = System.currentTimeMillis()
                 val sampleArticles = listOf(
                     ExtractedArticle(
                         id = 1L,
@@ -236,7 +281,17 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                         status = ArticleStatus.SUCCESS,
                         dataSizeKb = 340,
                         successfulImagesCount = 2,
-                        totalImagesCount = 2
+                        totalImagesCount = 2,
+                        deduplicationKey = DeduplicationHelper.generateDeduplicationKey("aljazeera.net", "https://www.aljazeera.net/tech/ai-newsroom", "الذكاء الاصطناعي التوليدي"),
+                        canonicalUrl = "https://www.aljazeera.net/tech/ai-newsroom",
+                        normalizedUrl = "https://aljazeera.net/tech/ai-newsroom",
+                        publishedAtEpoch = now - (2 * 3600 * 1000L),
+                        fetchedAtEpoch = now,
+                        createdAtEpoch = now,
+                        updatedAtEpoch = now,
+                        dateSource = DateSource.HTML,
+                        isNew = true,
+                        contentHash = DeduplicationHelper.generateContentHash("الذكاء الاصطناعي التوليدي", "شهدت الصحافة الرقمية")
                     ),
                     ExtractedArticle(
                         id = 2L,
@@ -254,7 +309,17 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                         status = ArticleStatus.SUCCESS,
                         dataSizeKb = 410,
                         successfulImagesCount = 2,
-                        totalImagesCount = 2
+                        totalImagesCount = 2,
+                        deduplicationKey = DeduplicationHelper.generateDeduplicationKey("skynewsarabia.com", "https://www.skynewsarabia.com/business/energy-investments", "اقتصادات الطاقة"),
+                        canonicalUrl = "https://www.skynewsarabia.com/business/energy-investments",
+                        normalizedUrl = "https://skynewsarabia.com/business/energy-investments",
+                        publishedAtEpoch = now - (5 * 3600 * 1000L),
+                        fetchedAtEpoch = now,
+                        createdAtEpoch = now,
+                        updatedAtEpoch = now,
+                        dateSource = DateSource.API,
+                        isNew = true,
+                        contentHash = DeduplicationHelper.generateContentHash("اقتصادات الطاقة", "أظهرت بيانات استقصائية")
                     ),
                     ExtractedArticle(
                         id = 3L,
@@ -271,7 +336,17 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                         status = ArticleStatus.SUCCESS,
                         dataSizeKb = 290,
                         successfulImagesCount = 1,
-                        totalImagesCount = 1
+                        totalImagesCount = 1,
+                        deduplicationKey = DeduplicationHelper.generateDeduplicationKey("bbc.com/arabic", "https://www.bbc.com/arabic/science-space", "تلسكوب جيمس ويب"),
+                        canonicalUrl = "https://www.bbc.com/arabic/science-space",
+                        normalizedUrl = "https://bbc.com/arabic/science-space",
+                        publishedAtEpoch = now - (28 * 3600 * 1000L),
+                        fetchedAtEpoch = now,
+                        createdAtEpoch = now,
+                        updatedAtEpoch = now,
+                        dateSource = DateSource.RSS,
+                        isNew = false, // Older than 24h: MUST NOT be marked as new
+                        contentHash = DeduplicationHelper.generateContentHash("تلسكوب جيمس ويب", "تمكن المرصد الفضائي")
                     ),
                     ExtractedArticle(
                         id = 4L,
@@ -288,7 +363,17 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                         retryCount = 1,
                         dataSizeKb = 45,
                         successfulImagesCount = 0,
-                        totalImagesCount = 2
+                        totalImagesCount = 2,
+                        deduplicationKey = DeduplicationHelper.generateDeduplicationKey("bloomberg-arabic.net", "https://bloomberg.com/news/shipping", "تقرير استقصائي حول سلاسل"),
+                        canonicalUrl = "https://bloomberg.com/news/shipping",
+                        normalizedUrl = "https://bloomberg.com/news/shipping",
+                        publishedAtEpoch = now - (52 * 3600 * 1000L),
+                        fetchedAtEpoch = now,
+                        createdAtEpoch = now,
+                        updatedAtEpoch = now,
+                        dateSource = DateSource.METADATA,
+                        isNew = false, // Old article: MUST NOT be marked as new
+                        contentHash = DeduplicationHelper.generateContentHash("تقرير استقصائي", "تعذر استخراج")
                     )
                 )
 

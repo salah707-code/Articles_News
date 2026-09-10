@@ -16,7 +16,9 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "articles",
     indices = [
+        Index(value = ["deduplication_key"], unique = true),
         Index(value = ["source_link"]),
+        Index(value = ["published_at_epoch"]),
         Index(value = ["status"]),
         Index(value = ["created_at"])
     ]
@@ -72,7 +74,38 @@ data class ArticleEntity(
     val totalImagesCount: Int = 0,
 
     @ColumnInfo(name = "created_at")
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+
+    // Forensic Timeline & Deduplication Columns
+    @ColumnInfo(name = "deduplication_key")
+    val deduplicationKey: String = "",
+
+    @ColumnInfo(name = "canonical_url")
+    val canonicalUrl: String = sourceLink,
+
+    @ColumnInfo(name = "normalized_url")
+    val normalizedUrl: String = "",
+
+    @ColumnInfo(name = "normalized_title")
+    val normalizedTitle: String = "",
+
+    @ColumnInfo(name = "published_at_epoch")
+    val publishedAtEpoch: Long = 0L,
+
+    @ColumnInfo(name = "fetched_at_epoch")
+    val fetchedAtEpoch: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "updated_at")
+    val updatedAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "date_source")
+    val dateSource: String = "UNKNOWN",
+
+    @ColumnInfo(name = "is_new")
+    val isNew: Boolean = false,
+
+    @ColumnInfo(name = "content_hash")
+    val contentHash: String = ""
 ) {
     // Convenience alias for existing callers
     val sourceUrl: String get() = sourceLink

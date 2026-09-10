@@ -19,7 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.data.model.ArticleFreshness
 import com.example.data.model.ArticleStatus
+import com.example.data.model.DateSource
 import com.example.data.model.ExtractedArticle
 import com.example.data.model.ExtractionStats
 import com.example.ui.FilterState
@@ -33,6 +35,8 @@ fun LibraryScreen(
     articles: List<ExtractedArticle>,
     stats: ExtractionStats,
     filterState: FilterState,
+    freshnessState: ArticleFreshness = ArticleFreshness.CACHED,
+    onRefreshLibrary: () -> Unit = {},
     onSearchChange: (String) -> Unit,
     onSourceFilterChange: (String?) -> Unit,
     onCategoryFilterChange: (String?) -> Unit,
@@ -52,11 +56,7 @@ fun LibraryScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 40.dp)
     ) {
-        // Library Stats Header:
-        // - {عدد المقالات} مقال
-        // - {عدد المصادر} مصدر
-        // - {عدد الصور} صورة
-        // - {حجم التخزين} مستخدم
+        // Library Stats & Freshness Header
         item {
             Card(
                 shape = RoundedCornerShape(18.dp),
@@ -66,13 +66,65 @@ fun LibraryScreen(
                 modifier = Modifier.fillMaxWidth().testTag("library_stats_card")
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "مكتبة المحتوى المستخرج",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "مكتبة المحتوى المستخرج",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "تدقيق التواريخ ومنع التكرار مفعل",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        // Freshness Badge + Refresh button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = when (freshnessState) {
+                                    ArticleFreshness.LIVE -> ColorSuccess.copy(alpha = 0.2f)
+                                    ArticleFreshness.CACHED -> MaterialTheme.colorScheme.surfaceVariant
+                                    ArticleFreshness.OFFLINE -> ColorError.copy(alpha = 0.2f)
+                                }
+                            ) {
+                                Text(
+                                    text = freshnessState.label,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when (freshnessState) {
+                                        ArticleFreshness.LIVE -> ColorSuccess
+                                        ArticleFreshness.CACHED -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        ArticleFreshness.OFFLINE -> ColorError
+                                    },
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = onRefreshLibrary,
+                                modifier = Modifier.size(32.dp).testTag("refresh_library_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "تحديث القائمة والتحقق من الحداثة",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -274,7 +326,7 @@ fun LibraryArticleCard(
             .testTag("article_card_${article.id}")
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Top badges: Source & Category & Status
+            // Top badges: Source & Category & New Badge & Status
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -306,6 +358,34 @@ fun LibraryArticleCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
+                    }
+
+                    // Explicit New vs Archive Badge
+                    if (article.isNew) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.errorContainer
+                        ) {
+                            Text(
+                                text = "🔥 جديد",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                        ) {
+                            Text(
+                                text = "أرشيف",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
 
@@ -364,7 +444,7 @@ fun LibraryArticleCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Metadata & image count
+            // Metadata: Date + Source Type + Images + Storage
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -372,11 +452,22 @@ fun LibraryArticleCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                         Text(article.publishedAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
+                        Text(
+                            text = article.dateSource.displayName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)

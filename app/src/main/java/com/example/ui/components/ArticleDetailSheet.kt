@@ -230,6 +230,43 @@ fun ArticleDetailSheet(
                 )
             }
 
+            // Forensic Audit Section: تدقيق التواريخ ومنع التكرار
+            item {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.VerifiedUser,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "سجل التدقيق الجنائي للخبر (Audit & Provenance)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        AuditInfoRow(label = "حالة الحداثة:", value = if (article.isNew) "🔥 خبر جديد (نُشر خلال 24 ساعة)" else "📦 خبر أرشيفي/سابق (غير موسوم كجديد)")
+                        AuditInfoRow(label = "مصدر توثيق التاريخ:", value = article.dateSource.displayName)
+                        AuditInfoRow(label = "تاريخ النشر المصدر:", value = article.publishedAt)
+                        AuditInfoRow(label = "مفتاح منع التكرار:", value = article.deduplicationKey.take(20) + "...")
+                        AuditInfoRow(label = "بصمة المحتوى الرقمية:", value = article.contentHash.take(14) + "...")
+                        AuditInfoRow(label = "الرابط المعياري:", value = article.canonicalUrl.ifBlank { article.sourceUrl })
+                    }
+                }
+            }
+
             // Actions: Delete or Close
             item {
                 Row(
@@ -260,5 +297,28 @@ fun ArticleDetailSheet(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun AuditInfoRow(label: String, value: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }

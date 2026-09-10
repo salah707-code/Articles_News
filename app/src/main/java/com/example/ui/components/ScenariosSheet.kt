@@ -33,6 +33,13 @@ fun ScenariosSheet(
 ) {
     val scenarios = listOf(
         ScenarioOption(
+            title = "تدقيق منع التكرار وتصنيف الأخبار القديمة",
+            description = "محاكاة استخراج مقالات مع تواريخ متفاوتة وفحص عدم وسم الأخبار الأرشيفية أو المتكررة كجديدة",
+            icon = Icons.Default.VerifiedUser,
+            scenarioKey = null,
+            defaultUrl = "https://www.aljazeera.net/news"
+        ),
+        ScenarioOption(
             title = "استخراج طبيعي متكامل (تحليل + استخراج + نجاح)",
             description = "عرض المراحل الخمس لتحليل الموقع، ثم عداد الاستخراج الحي، ثم ملخص النجاح الشامل",
             icon = Icons.Default.PlayArrow,

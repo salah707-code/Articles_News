@@ -1,9 +1,13 @@
 package com.example.engine
 
 import com.example.data.model.ArticleStatus
+import com.example.data.model.DateSource
 import com.example.data.model.ExtractedArticle
 import com.example.data.model.ExtractedMediaImage
 import com.example.data.model.ExtractionStage
+import com.example.data.model.ParsedDateResult
+import com.example.data.util.DateParserAndValidator
+import com.example.data.util.DeduplicationHelper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -212,14 +216,28 @@ class NewsExtractionEngine(private val externalScope: CoroutineScope) {
                 val successfulImgs = if (isArticleFailed) 0 else articleImages
                 successImages += successfulImgs
 
+                val now = System.currentTimeMillis()
+                val articleCanonicalUrl = DeduplicationHelper.normalizeUrl("$url/item/$i")
+                val dedupKey = DeduplicationHelper.generateDeduplicationKey(domain, articleCanonicalUrl, currentTitle)
+                val stableId = DeduplicationHelper.generateStableId(dedupKey)
+                val (dateResult, rawDateStr) = getDeterministicDateForIndex(i, now)
+                val isGenuinelyNew = DateParserAndValidator.isGenuinelyNew(
+                    publishedAtEpoch = dateResult.epochMillis,
+                    dateSource = dateResult.dateSource,
+                    isDuplicate = false,
+                    referenceTimeMillis = now
+                )
+                val fullBody = generateFullArticleBody(currentTitle, domain)
+                val contentHash = DeduplicationHelper.generateContentHash(currentTitle, fullBody)
+
                 val article = ExtractedArticle(
-                    id = System.currentTimeMillis() + i,
+                    id = stableId,
                     title = currentTitle,
-                    summary = "مستخلص إخباري شامل تم استخراجه وتحليله من المصدر $domain مع معالجة الصور والنصوص.",
-                    content = generateFullArticleBody(currentTitle, domain),
+                    summary = "مستخلص إخباري موثق تم استخراجه وتحليله من المصدر $domain مع التحقق من تاريخ النشر.",
+                    content = fullBody,
                     sourceName = domain,
-                    sourceUrl = url,
-                    publishedAt = "اليوم، ${10 + (i % 12)}:${(i * 7) % 60}",
+                    sourceUrl = articleCanonicalUrl,
+                    publishedAt = dateResult.formattedArabic,
                     category = getCategoryForIndex(i),
                     imageUrls = generateImageUrls(i),
                     status = articleStatus,
@@ -227,7 +245,17 @@ class NewsExtractionEngine(private val externalScope: CoroutineScope) {
                     retryCount = if (isArticleFailed) 1 else 0,
                     dataSizeKb = articleSize,
                     successfulImagesCount = successfulImgs,
-                    totalImagesCount = articleImages
+                    totalImagesCount = articleImages,
+                    deduplicationKey = dedupKey,
+                    canonicalUrl = articleCanonicalUrl,
+                    normalizedUrl = DeduplicationHelper.normalizeUrl(articleCanonicalUrl),
+                    publishedAtEpoch = dateResult.epochMillis,
+                    fetchedAtEpoch = now,
+                    createdAtEpoch = now,
+                    updatedAtEpoch = now,
+                    dateSource = dateResult.dateSource,
+                    isNew = isGenuinelyNew,
+                    contentHash = contentHash
                 )
                 collectedArticles.add(article)
 
@@ -313,21 +341,45 @@ class NewsExtractionEngine(private val externalScope: CoroutineScope) {
             totalImgs += imgs
             succImgs += imgs
 
+            val now = System.currentTimeMillis()
+            val articleCanonicalUrl = DeduplicationHelper.normalizeUrl("${current.targetUrl}/reconnected/$currentIdx")
+            val dedupKey = DeduplicationHelper.generateDeduplicationKey(current.siteName, articleCanonicalUrl, title)
+            val stableId = DeduplicationHelper.generateStableId(dedupKey)
+            val (dateResult, _) = getDeterministicDateForIndex(currentIdx, now)
+            val isGenuinelyNew = DateParserAndValidator.isGenuinelyNew(
+                publishedAtEpoch = dateResult.epochMillis,
+                dateSource = dateResult.dateSource,
+                isDuplicate = false,
+                referenceTimeMillis = now
+            )
+            val fullBody = generateFullArticleBody(title, current.siteName)
+            val contentHash = DeduplicationHelper.generateContentHash(title, fullBody)
+
             collected.add(
                 ExtractedArticle(
-                    id = System.currentTimeMillis() + currentIdx,
+                    id = stableId,
                     title = title,
-                    summary = "ملخص مقال مسترجع بعد استعادة الاتصال بنجاح وتوثيق المحتوى.",
-                    content = generateFullArticleBody(title, current.siteName),
+                    summary = "ملخص مقال مسترجع بعد استعادة الاتصال بنجاح وتوثيق المحتوى وتاريخ النشر.",
+                    content = fullBody,
                     sourceName = current.siteName,
-                    sourceUrl = current.targetUrl,
-                    publishedAt = "الآن",
+                    sourceUrl = articleCanonicalUrl,
+                    publishedAt = dateResult.formattedArabic,
                     category = "عام",
                     imageUrls = generateImageUrls(currentIdx),
                     status = ArticleStatus.SUCCESS,
                     dataSizeKb = size,
                     successfulImagesCount = imgs,
-                    totalImagesCount = imgs
+                    totalImagesCount = imgs,
+                    deduplicationKey = dedupKey,
+                    canonicalUrl = articleCanonicalUrl,
+                    normalizedUrl = DeduplicationHelper.normalizeUrl(articleCanonicalUrl),
+                    publishedAtEpoch = dateResult.epochMillis,
+                    fetchedAtEpoch = now,
+                    createdAtEpoch = now,
+                    updatedAtEpoch = now,
+                    dateSource = dateResult.dateSource,
+                    isNew = isGenuinelyNew,
+                    contentHash = contentHash
                 )
             )
 
@@ -484,5 +536,78 @@ class NewsExtractionEngine(private val externalScope: CoroutineScope) {
             
             ختاماً، تبقى التوقعات إيجابية للمرحلة المقبلة في ظل الخطوات الإيجابية المتسارعة التي تشهدها القطاعات ذات الصلة.
         """.trimIndent()
+    }
+
+    /**
+     * Deterministically produces realistic publication dates and sources for testing:
+     * - Some articles are truly fresh (1-4 hours ago -> DateSource.API / HTML, isNew = true)
+     * - Some articles are older (2-14 days ago -> DateSource.RSS / METADATA, isNew = false)
+     * - Some articles have missing/unknown dates (DateSource.UNKNOWN, isNew = false)
+     */
+    private fun getDeterministicDateForIndex(
+        idx: Int,
+        referenceNow: Long
+    ): Pair<ParsedDateResult, String> {
+        return when (idx % 6) {
+            1 -> {
+                // 1 hour ago: Genuine New article from API
+                val epoch = referenceNow - (3600 * 1000L)
+                ParsedDateResult(
+                    epochMillis = epoch,
+                    formattedArabic = "منذ ساعة",
+                    dateSource = DateSource.API,
+                    isValid = true
+                ) to "منذ ساعة"
+            }
+            2 -> {
+                // 4 hours ago: Genuine New article from HTML meta
+                val epoch = referenceNow - (4 * 3600 * 1000L)
+                ParsedDateResult(
+                    epochMillis = epoch,
+                    formattedArabic = "منذ 4 ساعات",
+                    dateSource = DateSource.HTML,
+                    isValid = true
+                ) to "منذ 4 ساعات"
+            }
+            3 -> {
+                // 3 days ago: OLD article from RSS (MUST NOT appear as new)
+                val epoch = referenceNow - (3 * 86400 * 1000L)
+                ParsedDateResult(
+                    epochMillis = epoch,
+                    formattedArabic = "منذ 3 أيام",
+                    dateSource = DateSource.RSS,
+                    isValid = true
+                ) to "منذ 3 أيام"
+            }
+            4 -> {
+                // 12 days ago: OLD article from METADATA (MUST NOT appear as new)
+                val epoch = referenceNow - (12 * 86400 * 1000L)
+                ParsedDateResult(
+                    epochMillis = epoch,
+                    formattedArabic = DateParserAndValidator.formatEpochToArabic(epoch),
+                    dateSource = DateSource.METADATA,
+                    isValid = true
+                ) to "2026/08/29"
+            }
+            5 -> {
+                // Undated article: DateSource.UNKNOWN (Policy: NEVER guess or treat as new without proof!)
+                ParsedDateResult(
+                    epochMillis = 0L,
+                    formattedArabic = "تاريخ غير محدد",
+                    dateSource = DateSource.UNKNOWN,
+                    isValid = false
+                ) to "غير محدد"
+            }
+            else -> {
+                // 8 hours ago: Genuine New article from API
+                val epoch = referenceNow - (8 * 3600 * 1000L)
+                ParsedDateResult(
+                    epochMillis = epoch,
+                    formattedArabic = "منذ 8 ساعات",
+                    dateSource = DateSource.API,
+                    isValid = true
+                ) to "منذ 8 ساعات"
+            }
+        }
     }
 }

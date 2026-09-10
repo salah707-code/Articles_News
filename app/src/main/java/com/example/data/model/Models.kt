@@ -7,6 +7,29 @@ enum class ArticleStatus {
     EXTRACTING
 }
 
+enum class DateSource(val displayName: String) {
+    API("خلاصة API"),
+    RSS("تغذية RSS"),
+    HTML("وسوم HTML"),
+    METADATA("بيانات معيارية"),
+    UNKNOWN("تاريخ غير محدد")
+}
+
+fun DateSource.ifUnknown(default: DateSource): DateSource = if (this == DateSource.UNKNOWN) default else this
+
+enum class ArticleFreshness(val label: String) {
+    LIVE("مباشر"),       // تازه ومحدث مباشرة من المصدر
+    CACHED("محفوظ محلياً"),     // مسترجع من قاعدة البيانات المحلية المؤقتة
+    OFFLINE("بدون اتصال")     // وضع عدم الاتصال بالإنترنت
+}
+
+data class ParsedDateResult(
+    val epochMillis: Long,
+    val formattedArabic: String,
+    val dateSource: DateSource,
+    val isValid: Boolean
+)
+
 data class ExtractedArticle(
     val id: Long = 0,
     val title: String,
@@ -23,7 +46,19 @@ data class ExtractedArticle(
     val maxRetries: Int = 3,
     val dataSizeKb: Long = 0,
     val successfulImagesCount: Int = 0,
-    val totalImagesCount: Int = 0
+    val totalImagesCount: Int = 0,
+    // Deduplication & Timeline Audit Fields
+    val deduplicationKey: String = "",
+    val canonicalUrl: String = sourceUrl,
+    val normalizedUrl: String = "",
+    val publishedAtEpoch: Long = 0L,
+    val fetchedAtEpoch: Long = 0L,
+    val createdAtEpoch: Long = 0L,
+    val updatedAtEpoch: Long = 0L,
+    val dateSource: DateSource = DateSource.UNKNOWN,
+    val isNew: Boolean = false,
+    val freshness: ArticleFreshness = ArticleFreshness.LIVE,
+    val contentHash: String = ""
 )
 
 data class ExtractedMediaImage(

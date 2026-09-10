@@ -55,6 +55,7 @@ fun NewsExtractorApp(
     val filterState by viewModel.filterState.collectAsStateWithLifecycle()
     val selectedArticle by viewModel.selectedArticle.collectAsStateWithLifecycle()
     val selectedImage by viewModel.selectedImage.collectAsStateWithLifecycle()
+    val freshnessState by viewModel.freshnessState.collectAsStateWithLifecycle()
 
     var showScenariosSheet by remember { mutableStateOf(false) }
 
@@ -125,6 +126,8 @@ fun NewsExtractorApp(
                             articles = filteredArticles,
                             stats = stats,
                             filterState = filterState,
+                            freshnessState = freshnessState,
+                            onRefreshLibrary = { viewModel.refreshLibrary() },
                             onSearchChange = { query -> viewModel.updateSearchQuery(query) },
                             onSourceFilterChange = { src -> viewModel.updateSourceFilter(src) },
                             onCategoryFilterChange = { cat -> viewModel.updateCategoryFilter(cat) },

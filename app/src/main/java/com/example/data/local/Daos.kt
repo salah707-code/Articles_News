@@ -10,14 +10,20 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ArticleDao {
-    @Query("SELECT * FROM articles ORDER BY created_at DESC")
+    @Query("SELECT * FROM articles ORDER BY published_at_epoch DESC, created_at DESC")
     fun getAllArticles(): Flow<List<ArticleEntity>>
 
-    @Query("SELECT * FROM articles WHERE status = :status ORDER BY created_at DESC")
+    @Query("SELECT * FROM articles WHERE status = :status ORDER BY published_at_epoch DESC, created_at DESC")
     fun getArticlesByStatus(status: String): Flow<List<ArticleEntity>>
 
     @Query("SELECT * FROM articles WHERE id = :id LIMIT 1")
     fun getArticleById(id: Long): Flow<ArticleEntity?>
+
+    @Query("SELECT * FROM articles WHERE deduplication_key = :key LIMIT 1")
+    suspend fun getArticleByDeduplicationKey(key: String): ArticleEntity?
+
+    @Query("SELECT * FROM articles WHERE normalized_url = :normalizedUrl LIMIT 1")
+    suspend fun getArticleByNormalizedUrl(normalizedUrl: String): ArticleEntity?
 
     @Query("SELECT * FROM articles WHERE source_link = :sourceLink LIMIT 1")
     suspend fun getArticleBySourceLink(sourceLink: String): ArticleEntity?
@@ -27,9 +33,12 @@ interface ArticleDao {
         WHERE title LIKE '%' || :query || '%' 
            OR summary LIKE '%' || :query || '%' 
            OR source_name LIKE '%' || :query || '%'
-        ORDER BY created_at DESC
+        ORDER BY published_at_epoch DESC, created_at DESC
     """)
     fun searchArticles(query: String): Flow<List<ArticleEntity>>
+
+    @Query("SELECT * FROM articles WHERE is_new = 1 ORDER BY published_at_epoch DESC")
+    fun getNewArticles(): Flow<List<ArticleEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArticles(articles: List<ArticleEntity>): List<Long>
