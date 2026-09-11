@@ -31,6 +31,7 @@ fun ArticleDetailSheet(
     onDismiss: () -> Unit,
     onRetry: (ExtractedArticle) -> Unit,
     onDelete: (Long) -> Unit,
+    onToggleOffline: ((ExtractedArticle) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     ModalBottomSheet(
@@ -263,12 +264,34 @@ fun ArticleDetailSheet(
                         AuditInfoRow(label = "مفتاح منع التكرار:", value = article.deduplicationKey.take(20) + "...")
                         AuditInfoRow(label = "بصمة المحتوى الرقمية:", value = article.contentHash.take(14) + "...")
                         AuditInfoRow(label = "الرابط المعياري:", value = article.canonicalUrl.ifBlank { article.sourceUrl })
+                        AuditInfoRow(
+                            label = "حالة الحفظ أوفلاين:",
+                            value = if (article.isSavedOffline) "محفوظ دون إنترنت 💾" else "غير محفوظ أوفلاين"
+                        )
                     }
                 }
             }
 
-            // Actions: Delete or Close
+            // Offline Toggle & Action Buttons
             item {
+                if (onToggleOffline != null) {
+                    FilledTonalButton(
+                        onClick = { onToggleOffline(article) },
+                        modifier = Modifier.fillMaxWidth().testTag("toggle_offline_button")
+                    ) {
+                        Icon(
+                            if (article.isSavedOffline) Icons.Default.DownloadDone else Icons.Default.Download,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (article.isSavedOffline) "محفوظ للقراءة أوفلاين (اضغط للإلغاء)" else "حفظ المقال للقراءة أوفلاين دون إنترنت"
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)

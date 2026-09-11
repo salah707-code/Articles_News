@@ -8,13 +8,20 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [ArticleEntity::class, RecentExtractionEntity::class],
-    version = 2,
+    entities = [
+        ArticleEntity::class,
+        RecentExtractionEntity::class,
+        CustomNewsSourceEntity::class,
+        UserSettingsEntity::class
+    ],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun articleDao(): ArticleDao
     abstract fun recentExtractionDao(): RecentExtractionDao
+    abstract fun customNewsSourceDao(): CustomNewsSourceDao
+    abstract fun userSettingsDao(): UserSettingsDao
 
     companion object {
         @Volatile
@@ -40,6 +47,35 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE articles ADD COLUMN is_saved_offline INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS custom_sources (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        url TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        is_enabled INTEGER NOT NULL,
+                        is_custom INTEGER NOT NULL,
+                        created_at INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_custom_sources_url ON custom_sources(url)")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS user_settings (
+                        id INTEGER PRIMARY KEY NOT NULL,
+                        preferred_categories TEXT NOT NULL,
+                        notifications_enabled INTEGER NOT NULL,
+                        notification_frequency_minutes INTEGER NOT NULL,
+                        auto_sync_enabled INTEGER NOT NULL,
+                        auto_save_offline INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("INSERT OR IGNORE INTO user_settings (id, preferred_categories, notifications_enabled, notification_frequency_minutes, auto_sync_enabled, auto_save_offline) VALUES (1, 'تكنولوجيا,سياسة,اقتصاد,رياضة,صحة,ثقافة', 1, 60, 1, 0)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -47,7 +83,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "news_extractor_database"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

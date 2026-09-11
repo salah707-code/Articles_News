@@ -58,7 +58,27 @@ data class ExtractedArticle(
     val dateSource: DateSource = DateSource.UNKNOWN,
     val isNew: Boolean = false,
     val freshness: ArticleFreshness = ArticleFreshness.LIVE,
-    val contentHash: String = ""
+    val contentHash: String = "",
+    val isSavedOffline: Boolean = false
+)
+
+data class CustomNewsSource(
+    val id: Long = 0,
+    val name: String,
+    val url: String,
+    val category: String = "عام",
+    val isEnabled: Boolean = true,
+    val isCustom: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+data class UserSettings(
+    val id: Int = 1,
+    val preferredCategories: List<String> = listOf("تكنولوجيا", "سياسة", "اقتصاد", "رياضة", "صحة", "ثقافة"),
+    val notificationsEnabled: Boolean = true,
+    val notificationFrequencyMinutes: Long = 60L,
+    val autoSyncEnabled: Boolean = true,
+    val autoSaveOffline: Boolean = false
 )
 
 data class ExtractedMediaImage(

@@ -24,6 +24,7 @@ enum class AppNavTab {
     HOME,
     EXTRACTION,
     LIBRARY,
+    SOURCES_SETTINGS,
     GALLERY
 }
 
@@ -32,7 +33,8 @@ data class FilterState(
     val selectedSource: String? = null,
     val selectedCategory: String? = null,
     val selectedStatus: ArticleStatus? = null,
-    val selectedTimeRange: String = "ALL" // ALL, TODAY, WEEK
+    val selectedTimeRange: String = "ALL", // ALL, TODAY, WEEK
+    val onlyOfflineSaved: Boolean = false
 )
 
 class NewsViewModel(application: Application) : AndroidViewModel(application) {
@@ -62,6 +64,9 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     val freshnessState: StateFlow<ArticleFreshness>
 
     val allArticles: StateFlow<List<ExtractedArticle>>
+    val offlineArticles: StateFlow<List<ExtractedArticle>>
+    val customSources: StateFlow<List<com.example.data.model.CustomNewsSource>>
+    val userSettings: StateFlow<com.example.data.model.UserSettings>
     val stats: StateFlow<ExtractionStats>
     val recentExtractions: StateFlow<List<RecentExtractionEntity>>
 
@@ -94,6 +99,24 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
             emptyList()
         )
 
+        offlineArticles = repository.offlineArticles.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
+
+        customSources = repository.customSources.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            emptyList()
+        )
+
+        userSettings = repository.userSettings.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            com.example.data.model.UserSettings()
+        )
+
         stats = repository.stats.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
@@ -116,8 +139,9 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 val matchesSource = filter.selectedSource == null || article.sourceName == filter.selectedSource
                 val matchesCategory = filter.selectedCategory == null || article.category == filter.selectedCategory
                 val matchesStatus = filter.selectedStatus == null || article.status == filter.selectedStatus
+                val matchesOffline = !filter.onlyOfflineSaved || article.isSavedOffline
 
-                matchesQuery && matchesSource && matchesCategory && matchesStatus
+                matchesQuery && matchesSource && matchesCategory && matchesStatus && matchesOffline
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -164,8 +188,75 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         _filterState.value = _filterState.value.copy(selectedStatus = status)
     }
 
+    fun toggleOfflineFilter(onlySaved: Boolean) {
+        _filterState.value = _filterState.value.copy(onlyOfflineSaved = onlySaved)
+    }
+
     fun clearFilters() {
         _filterState.value = FilterState()
+    }
+
+    fun toggleArticleOffline(article: ExtractedArticle) {
+        viewModelScope.launch {
+            val newStatus = !article.isSavedOffline
+            repository.toggleArticleOfflineSaved(article.id, newStatus)
+            if (_selectedArticle.value?.id == article.id) {
+                _selectedArticle.value = _selectedArticle.value?.copy(isSavedOffline = newStatus)
+            }
+        }
+    }
+
+    fun toggleOfflineStatus(articleId: Long, isSaved: Boolean) {
+        viewModelScope.launch {
+            repository.toggleArticleOfflineSaved(articleId, isSaved)
+            if (_selectedArticle.value?.id == articleId) {
+                _selectedArticle.value = _selectedArticle.value?.copy(isSavedOffline = isSaved)
+            }
+        }
+    }
+
+    fun addCustomSource(name: String, url: String, category: String) {
+        viewModelScope.launch {
+            repository.addCustomSource(name, url, category)
+        }
+    }
+
+    fun toggleSource(source: com.example.data.model.CustomNewsSource, isEnabled: Boolean) {
+        viewModelScope.launch {
+            repository.toggleSourceEnabled(source, isEnabled)
+        }
+    }
+
+    fun toggleSourceEnabled(source: com.example.data.model.CustomNewsSource, isEnabled: Boolean) {
+        viewModelScope.launch {
+            repository.toggleSourceEnabled(source, isEnabled)
+        }
+    }
+
+    fun deleteSource(sourceId: Long) {
+        viewModelScope.launch {
+            repository.deleteCustomSource(sourceId)
+        }
+    }
+
+    fun deleteCustomSource(sourceId: Long) {
+        deleteSource(sourceId)
+    }
+
+    fun updateUserSettings(newSettings: com.example.data.model.UserSettings) {
+        viewModelScope.launch {
+            repository.saveUserSettings(newSettings)
+            if (newSettings.notificationsEnabled) {
+                com.example.worker.NewsSyncWorker.schedulePeriodicSync(
+                    getApplication(),
+                    newSettings.notificationFrequencyMinutes.toLong()
+                )
+            }
+        }
+    }
+
+    fun triggerImmediateWorkerSync() {
+        com.example.worker.NewsSyncWorker.triggerImmediateSync(getApplication())
     }
 
     fun selectArticle(article: ExtractedArticle?) {
@@ -261,6 +352,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun seedInitialData() {
         viewModelScope.launch {
+            repository.seedDefaultSourcesIfNeeded()
+            com.example.worker.NewsSyncWorker.schedulePeriodicSync(getApplication(), 60L)
             val currentArticles = allArticles.first()
             if (currentArticles.isEmpty()) {
                 val now = System.currentTimeMillis()

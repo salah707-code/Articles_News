@@ -46,6 +46,12 @@ fun AppBottomBar(
             unselectedIcon = Icons.Outlined.Article
         ),
         NavigationItem(
+            tab = AppNavTab.SOURCES_SETTINGS,
+            title = "المصادر",
+            selectedIcon = Icons.Filled.Settings,
+            unselectedIcon = Icons.Outlined.Settings
+        ),
+        NavigationItem(
             tab = AppNavTab.GALLERY,
             title = "الصور",
             selectedIcon = Icons.Filled.PhotoLibrary,

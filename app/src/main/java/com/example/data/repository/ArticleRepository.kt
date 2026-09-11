@@ -16,9 +16,17 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
+data class UpsertAuditResult(
+    val articleId: Long,
+    val isNewRecord: Boolean,
+    val isGenuinelyNew: Boolean
+)
+
 class ArticleRepository(private val database: AppDatabase) {
     private val articleDao = database.articleDao()
     private val recentExtractionDao = database.recentExtractionDao()
+    private val customNewsSourceDao = database.customNewsSourceDao()
+    private val userSettingsDao = database.userSettingsDao()
 
     val allArticles: Flow<List<ExtractedArticle>> = articleDao.getAllArticles().map { entities ->
         entities.map { it.toModel() }
@@ -26,6 +34,39 @@ class ArticleRepository(private val database: AppDatabase) {
 
     val newArticles: Flow<List<ExtractedArticle>> = articleDao.getNewArticles().map { entities ->
         entities.map { it.toModel() }
+    }
+
+    val offlineArticles: Flow<List<ExtractedArticle>> = articleDao.getOfflineSavedArticles().map { entities ->
+        entities.map { it.toModel() }
+    }
+
+    val customSources: Flow<List<com.example.data.model.CustomNewsSource>> = customNewsSourceDao.getAllSources().map { entities ->
+        entities.map { entity ->
+            com.example.data.model.CustomNewsSource(
+                id = entity.id,
+                name = entity.name,
+                url = entity.url,
+                category = entity.category,
+                isEnabled = entity.isEnabled,
+                isCustom = entity.isCustom,
+                createdAt = entity.createdAt
+            )
+        }
+    }
+
+    val userSettings: Flow<com.example.data.model.UserSettings> = userSettingsDao.getUserSettings().map { entity ->
+        if (entity != null) {
+            com.example.data.model.UserSettings(
+                id = entity.id,
+                preferredCategories = entity.preferredCategories.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                notificationsEnabled = entity.notificationsEnabled,
+                notificationFrequencyMinutes = entity.notificationFrequencyMinutes,
+                autoSyncEnabled = entity.autoSyncEnabled,
+                autoSaveOffline = entity.autoSaveOffline
+            )
+        } else {
+            com.example.data.model.UserSettings()
+        }
     }
 
     val stats: Flow<ExtractionStats> = combine(
@@ -57,10 +98,10 @@ class ArticleRepository(private val database: AppDatabase) {
     }
 
     suspend fun insertArticle(article: ExtractedArticle): Long {
-        return upsertArticleWithAudit(article)
+        return upsertArticleWithAudit(article).articleId
     }
 
-    private suspend fun upsertArticleWithAudit(article: ExtractedArticle): Long {
+    suspend fun upsertArticleWithAudit(article: ExtractedArticle): UpsertAuditResult {
         val normUrl = DeduplicationHelper.normalizeUrl(article.sourceUrl)
         val normTitle = DeduplicationHelper.normalizeTitle(article.title)
         val dedupKey = if (article.deduplicationKey.isNotBlank()) {
@@ -125,7 +166,11 @@ class ArticleRepository(private val database: AppDatabase) {
                 storageAction = NewsAuditLogger.StorageAction.UPDATE_EXISTING
             )
 
-            existing.id
+            UpsertAuditResult(
+                articleId = existing.id,
+                isNewRecord = false,
+                isGenuinelyNew = false
+            )
         } else {
             // NEW RECORD: Check if genuinely published recently
             val isGenuinelyNew = DateParserAndValidator.isGenuinelyNew(
@@ -179,7 +224,11 @@ class ArticleRepository(private val database: AppDatabase) {
                 storageAction = NewsAuditLogger.StorageAction.INSERT_NEW
             )
 
-            newEntity.id
+            UpsertAuditResult(
+                articleId = newEntity.id,
+                isNewRecord = true,
+                isGenuinelyNew = isGenuinelyNew
+            )
         }
     }
 
@@ -204,6 +253,61 @@ class ArticleRepository(private val database: AppDatabase) {
 
     fun searchArticles(query: String): Flow<List<ExtractedArticle>> {
         return articleDao.searchArticles(query).map { list -> list.map { it.toModel() } }
+    }
+
+    suspend fun toggleArticleOfflineSaved(articleId: Long, isSaved: Boolean) {
+        articleDao.updateSavedOfflineStatus(articleId, isSaved)
+    }
+
+    suspend fun addCustomSource(name: String, url: String, category: String): Long {
+        return customNewsSourceDao.insertSource(
+            com.example.data.local.CustomNewsSourceEntity(
+                name = name.trim(),
+                url = url.trim(),
+                category = category.trim().ifBlank { "عام" },
+                isEnabled = true,
+                isCustom = true
+            )
+        )
+    }
+
+    suspend fun toggleSourceEnabled(source: com.example.data.model.CustomNewsSource, isEnabled: Boolean) {
+        customNewsSourceDao.updateSource(
+            com.example.data.local.CustomNewsSourceEntity(
+                id = source.id,
+                name = source.name,
+                url = source.url,
+                category = source.category,
+                isEnabled = isEnabled,
+                isCustom = source.isCustom,
+                createdAt = source.createdAt
+            )
+        )
+    }
+
+    suspend fun deleteCustomSource(sourceId: Long) {
+        customNewsSourceDao.deleteSourceById(sourceId)
+    }
+
+    suspend fun seedDefaultSourcesIfNeeded() {
+        if (customNewsSourceDao.getSourcesCount() == 0) {
+            customNewsSourceDao.insertDefaultSources(
+                com.example.worker.NewsSyncWorker.getDefaultNewsSources()
+            )
+        }
+    }
+
+    suspend fun saveUserSettings(settings: com.example.data.model.UserSettings) {
+        userSettingsDao.saveUserSettings(
+            com.example.data.local.UserSettingsEntity(
+                id = 1,
+                preferredCategories = settings.preferredCategories.joinToString(","),
+                notificationsEnabled = settings.notificationsEnabled,
+                notificationFrequencyMinutes = settings.notificationFrequencyMinutes,
+                autoSyncEnabled = settings.autoSyncEnabled,
+                autoSaveOffline = settings.autoSaveOffline
+            )
+        )
     }
 
     suspend fun saveRecentExtraction(extraction: RecentExtractionEntity) {
@@ -253,7 +357,8 @@ class ArticleRepository(private val database: AppDatabase) {
             dateSource = dSource,
             isNew = isNew,
             freshness = ArticleFreshness.CACHED,
-            contentHash = contentHash
+            contentHash = contentHash,
+            isSavedOffline = isSavedOffline
         )
     }
 
@@ -286,7 +391,8 @@ class ArticleRepository(private val database: AppDatabase) {
             updatedAt = System.currentTimeMillis(),
             dateSource = dateSource.name,
             isNew = isNew,
-            contentHash = contentHash
+            contentHash = contentHash,
+            isSavedOffline = isSavedOffline
         )
     }
 }

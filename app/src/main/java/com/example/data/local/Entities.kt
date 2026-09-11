@@ -105,11 +105,68 @@ data class ArticleEntity(
     val isNew: Boolean = false,
 
     @ColumnInfo(name = "content_hash")
-    val contentHash: String = ""
+    val contentHash: String = "",
+
+    @ColumnInfo(name = "is_saved_offline")
+    val isSavedOffline: Boolean = false
 ) {
     // Convenience alias for existing callers
     val sourceUrl: String get() = sourceLink
 }
+
+@Entity(
+    tableName = "custom_sources",
+    indices = [
+        Index(value = ["url"], unique = true)
+    ]
+)
+data class CustomNewsSourceEntity(
+    @PrimaryKey(autoGenerate = true)
+    @ColumnInfo(name = "id")
+    val id: Long = 0,
+
+    @ColumnInfo(name = "name")
+    val name: String,
+
+    @ColumnInfo(name = "url")
+    val url: String,
+
+    @ColumnInfo(name = "category")
+    val category: String = "عام",
+
+    @ColumnInfo(name = "is_enabled")
+    val isEnabled: Boolean = true,
+
+    @ColumnInfo(name = "is_custom")
+    val isCustom: Boolean = true,
+
+    @ColumnInfo(name = "created_at")
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "user_settings"
+)
+data class UserSettingsEntity(
+    @PrimaryKey
+    @ColumnInfo(name = "id")
+    val id: Int = 1,
+
+    @ColumnInfo(name = "preferred_categories")
+    val preferredCategories: String = "تكنولوجيا,سياسة,اقتصاد,رياضة,صحة,ثقافة",
+
+    @ColumnInfo(name = "notifications_enabled")
+    val notificationsEnabled: Boolean = true,
+
+    @ColumnInfo(name = "notification_frequency_minutes")
+    val notificationFrequencyMinutes: Long = 60L,
+
+    @ColumnInfo(name = "auto_sync_enabled")
+    val autoSyncEnabled: Boolean = true,
+
+    @ColumnInfo(name = "auto_save_offline")
+    val autoSaveOffline: Boolean = false
+)
 
 @Entity(
     tableName = "recent_extractions",

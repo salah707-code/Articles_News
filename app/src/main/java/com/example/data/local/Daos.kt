@@ -40,6 +40,12 @@ interface ArticleDao {
     @Query("SELECT * FROM articles WHERE is_new = 1 ORDER BY published_at_epoch DESC")
     fun getNewArticles(): Flow<List<ArticleEntity>>
 
+    @Query("SELECT * FROM articles WHERE is_saved_offline = 1 ORDER BY published_at_epoch DESC, created_at DESC")
+    fun getOfflineSavedArticles(): Flow<List<ArticleEntity>>
+
+    @Query("UPDATE articles SET is_saved_offline = :isSaved WHERE id = :id")
+    suspend fun updateSavedOfflineStatus(id: Long, isSaved: Boolean)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArticles(articles: List<ArticleEntity>): List<Long>
 
@@ -69,6 +75,45 @@ interface ArticleDao {
 
     @Query("SELECT COALESCE(SUM(total_images_count), 0) FROM articles")
     fun getTotalImagesCount(): Flow<Int>
+}
+
+@Dao
+interface CustomNewsSourceDao {
+    @Query("SELECT * FROM custom_sources ORDER BY is_enabled DESC, created_at ASC")
+    fun getAllSources(): Flow<List<CustomNewsSourceEntity>>
+
+    @Query("SELECT * FROM custom_sources WHERE is_enabled = 1")
+    suspend fun getEnabledSources(): List<CustomNewsSourceEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSource(source: CustomNewsSourceEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertDefaultSources(sources: List<CustomNewsSourceEntity>)
+
+    @Update
+    suspend fun updateSource(source: CustomNewsSourceEntity)
+
+    @Delete
+    suspend fun deleteSource(source: CustomNewsSourceEntity)
+
+    @Query("DELETE FROM custom_sources WHERE id = :id")
+    suspend fun deleteSourceById(id: Long)
+
+    @Query("SELECT COUNT(*) FROM custom_sources")
+    suspend fun getSourcesCount(): Int
+}
+
+@Dao
+interface UserSettingsDao {
+    @Query("SELECT * FROM user_settings WHERE id = 1 LIMIT 1")
+    fun getUserSettings(): Flow<UserSettingsEntity?>
+
+    @Query("SELECT * FROM user_settings WHERE id = 1 LIMIT 1")
+    suspend fun getUserSettingsSync(): UserSettingsEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveUserSettings(settings: UserSettingsEntity)
 }
 
 @Dao

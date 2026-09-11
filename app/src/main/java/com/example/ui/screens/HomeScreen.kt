@@ -31,18 +31,25 @@ import com.example.ui.theme.ColorSuccess
 fun HomeScreen(
     stats: ExtractionStats,
     recentExtractions: List<RecentExtractionEntity>,
+    customSources: List<com.example.data.model.CustomNewsSource> = emptyList(),
     onStartExtraction: (String) -> Unit,
     onViewLibrary: () -> Unit,
+    onNavigateToSources: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var urlInput by remember { mutableStateOf("") }
-    val quickPresets = listOf(
+    val defaultPresets = listOf(
         "aljazeera.net/news" to "الجزيرة نت",
         "bbc.com/arabic" to "بي بي سي عربي",
         "skynewsarabia.com" to "سكاي نيوز عربية",
         "alarabiya.net" to "العربية نت",
         "unlimit-tech.com" to "التقنية بلا حدود"
     )
+    val displayPresets = if (customSources.filter { it.isEnabled }.isNotEmpty()) {
+        customSources.filter { it.isEnabled }.map { it.url to it.name }
+    } else {
+        defaultPresets
+    }
 
     LazyColumn(
         modifier = modifier
@@ -208,12 +215,21 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(quickPresets) { (presetUrl, label) ->
+                        items(displayPresets) { (presetUrl, label) ->
                             SuggestionChip(
                                 onClick = { urlInput = presetUrl },
                                 label = { Text(label, fontSize = 12.sp) },
                                 icon = {
                                     Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(14.dp))
+                                }
+                            )
+                        }
+                        item {
+                            SuggestionChip(
+                                onClick = onNavigateToSources,
+                                label = { Text("+ تخصيص المواقع", fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+                                icon = {
+                                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
                                 }
                             )
                         }

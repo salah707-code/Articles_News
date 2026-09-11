@@ -56,6 +56,9 @@ fun NewsExtractorApp(
     val selectedArticle by viewModel.selectedArticle.collectAsStateWithLifecycle()
     val selectedImage by viewModel.selectedImage.collectAsStateWithLifecycle()
     val freshnessState by viewModel.freshnessState.collectAsStateWithLifecycle()
+    val customSources by viewModel.customSources.collectAsStateWithLifecycle()
+    val userSettings by viewModel.userSettings.collectAsStateWithLifecycle()
+    val offlineArticles by viewModel.offlineArticles.collectAsStateWithLifecycle()
 
     var showScenariosSheet by remember { mutableStateOf(false) }
 
@@ -100,8 +103,10 @@ fun NewsExtractorApp(
                         HomeScreen(
                             stats = stats,
                             recentExtractions = recentExtractions,
+                            customSources = customSources,
                             onStartExtraction = { url -> viewModel.startExtraction(url) },
-                            onViewLibrary = { viewModel.setTab(AppNavTab.LIBRARY) }
+                            onViewLibrary = { viewModel.setTab(AppNavTab.LIBRARY) },
+                            onNavigateToSources = { viewModel.setTab(AppNavTab.SOURCES_SETTINGS) }
                         )
                     }
 
@@ -132,9 +137,28 @@ fun NewsExtractorApp(
                             onSourceFilterChange = { src -> viewModel.updateSourceFilter(src) },
                             onCategoryFilterChange = { cat -> viewModel.updateCategoryFilter(cat) },
                             onStatusFilterChange = { status -> viewModel.updateStatusFilter(status) },
+                            onToggleOfflineFilter = { viewModel.toggleOfflineFilter(it) },
+                            onToggleArticleOffline = { viewModel.toggleOfflineStatus(it.id, !it.isSavedOffline) },
                             onClearFilters = { viewModel.clearFilters() },
                             onSelectArticle = { article -> viewModel.selectArticle(article) },
                             onDeleteArticle = { id -> viewModel.deleteArticle(id) }
+                        )
+                    }
+
+                    AppNavTab.SOURCES_SETTINGS -> {
+                        SourcesAndSettingsScreen(
+                            sources = customSources,
+                            userSettings = userSettings,
+                            offlineArticlesCount = offlineArticles.size,
+                            onAddSource = { name, url, cat -> viewModel.addCustomSource(name, url, cat) },
+                            onToggleSource = { src, enabled -> viewModel.toggleSourceEnabled(src, enabled) },
+                            onDeleteSource = { id -> viewModel.deleteCustomSource(id) },
+                            onUpdateSettings = { s -> viewModel.updateUserSettings(s) },
+                            onTriggerTestSync = { viewModel.triggerImmediateWorkerSync() },
+                            onNavigateToOfflineArticles = {
+                                viewModel.toggleOfflineFilter(true)
+                                viewModel.setTab(AppNavTab.LIBRARY)
+                            }
                         )
                     }
 
@@ -165,7 +189,8 @@ fun NewsExtractorApp(
             article = article,
             onDismiss = { viewModel.selectArticle(null) },
             onRetry = { art -> viewModel.retryArticleFromLibrary(art) },
-            onDelete = { id -> viewModel.deleteArticle(id) }
+            onDelete = { id -> viewModel.deleteArticle(id) },
+            onToggleOffline = { art -> viewModel.toggleOfflineStatus(art.id, !art.isSavedOffline) }
         )
     }
 

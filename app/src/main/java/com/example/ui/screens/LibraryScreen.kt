@@ -41,6 +41,8 @@ fun LibraryScreen(
     onSourceFilterChange: (String?) -> Unit,
     onCategoryFilterChange: (String?) -> Unit,
     onStatusFilterChange: (ArticleStatus?) -> Unit,
+    onToggleOfflineFilter: (Boolean) -> Unit = {},
+    onToggleArticleOffline: (ExtractedArticle) -> Unit = {},
     onClearFilters: () -> Unit,
     onSelectArticle: (ExtractedArticle) -> Unit,
     onDeleteArticle: (Long) -> Unit,
@@ -246,6 +248,20 @@ fun LibraryScreen(
                     onClick = { onStatusFilterChange(ArticleStatus.FAILED) },
                     label = { Text("يحتاج إعادة محاولة") }
                 )
+
+                FilterChip(
+                    selected = filterState.onlyOfflineSaved,
+                    onClick = { onToggleOfflineFilter(!filterState.onlyOfflineSaved) },
+                    leadingIcon = {
+                        Icon(
+                            if (filterState.onlyOfflineSaved) Icons.Default.DownloadDone else Icons.Default.Download,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    label = { Text("المحفوظة أوفلاين") },
+                    modifier = Modifier.testTag("filter_offline_chip")
+                )
             }
         }
 
@@ -301,7 +317,8 @@ fun LibraryScreen(
                 LibraryArticleCard(
                     article = article,
                     onClick = { onSelectArticle(article) },
-                    onDelete = { onDeleteArticle(article.id) }
+                    onDelete = { onDeleteArticle(article.id) },
+                    onToggleOffline = { onToggleArticleOffline(article) }
                 )
             }
         }
@@ -313,6 +330,7 @@ fun LibraryArticleCard(
     article: ExtractedArticle,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onToggleOffline: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isFailed = article.status == ArticleStatus.FAILED
@@ -326,7 +344,7 @@ fun LibraryArticleCard(
             .testTag("article_card_${article.id}")
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Top badges: Source & Category & New Badge & Status
+            // Top badges: Source & Category & New Badge & Offline Badge & Status
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -385,6 +403,33 @@ fun LibraryArticleCard(
                                 color = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
+                        }
+                    }
+
+                    // Offline Badge
+                    if (article.isSavedOffline) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = ColorSuccess.copy(alpha = 0.15f)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.DownloadDone,
+                                    contentDescription = null,
+                                    tint = ColorSuccess,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = "أوفلاين",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ColorSuccess,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
@@ -479,16 +524,32 @@ fun LibraryArticleCard(
                     }
                 }
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        Icons.Default.DeleteOutline,
-                        contentDescription = "حذف",
-                        tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(18.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onToggleOffline,
+                        modifier = Modifier.size(28.dp).testTag("card_toggle_offline_${article.id}")
+                    ) {
+                        Icon(
+                            if (article.isSavedOffline) Icons.Default.CloudDone else Icons.Default.CloudDownload,
+                            contentDescription = if (article.isSavedOffline) "محفوظ أوفلاين" else "حفظ أوفلاين",
+                            tint = if (article.isSavedOffline) ColorSuccess else MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.DeleteOutline,
+                            contentDescription = "حذف",
+                            tint = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
